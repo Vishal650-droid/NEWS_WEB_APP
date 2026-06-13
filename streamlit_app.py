@@ -10,7 +10,7 @@ from datetime import datetime
 import feedparser
 import streamlit as st
 
-# Configure project path resolution for modular src imports
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
