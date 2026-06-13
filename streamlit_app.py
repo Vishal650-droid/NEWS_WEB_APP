@@ -1,36 +1,23 @@
 """
-The Sentiment Post — NYT-inspired News Sentiment Dashboard
-============================================================
-Root-level entry point. Sentiment logic imported from src.sentiment_model.
-
-Run with:
-    streamlit run streamlit_app.py
+The Sentiment Post: Live RSS News Aggregator and Sentiment Analysis Dashboard.
+Built using Streamlit, feedparser, and custom VADER NLP pipeline integration.
 """
 
-# ── stdlib ─────────────────────────────────────────────────────────────────────
+import os
 import re
 import sys
-import os
 from datetime import datetime
-
-# ── third-party ────────────────────────────────────────────────────────────────
-import streamlit as st
 import feedparser
+import streamlit as st
 
-# ── path: make the project root importable so `from src.sentiment_model import …`
-#    resolves regardless of the working directory used to launch streamlit.
+# Configure project path resolution for modular src imports
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-# ── project import ─────────────────────────────────────────────────────────────
-from src.sentiment_model import get_sentiment_scores   # noqa: E402
+from src.sentiment_model import get_sentiment_scores
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  RSS FEED REGISTRY
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Supported Global RSS Feeds
 RSS_FEEDS: dict[str, str] = {
     "BBC News":     "http://feeds.bbci.co.uk/news/rss.xml",
     "Reuters":      "https://feeds.reuters.com/reuters/topNews",
@@ -41,11 +28,6 @@ RSS_FEEDS: dict[str, str] = {
     "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
 }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PAGE CONFIG  (must be the first Streamlit call)
-# ══════════════════════════════════════════════════════════════════════════════
-
 st.set_page_config(
     page_title="The Sentiment Post",
     page_icon="📰",
@@ -53,30 +35,23 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GLOBAL CSS — Overrides System Dark Mode for an Authentic Editorial Look
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Global CSS Injection: Enforces Light Editorial Theme & Handles UI Components
 st.markdown(
     """
     <style>
-    /* ── Fonts ────────────────────────────────────────────────────────────── */
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600&display=swap');
 
-    /* ── High-Specificity Light Theme Force ──────────────────────────────── */
+    /* Global Typography & Light Layout Anchor */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"] {
         background-color: #faf9f7 !important;
         color: #121212 !important;
         font-family: 'Source Sans 3', Arial, sans-serif;
     }
 
-    /* Force all text elements in main content area to read beautifully */
     h1, h2, h3, h4, h5, h6, p, span, label, div {
         color: #121212 !important;
     }
 
-    /* Clear header block */
     [data-testid="stHeader"] {
         background-color: transparent !important;
     }
@@ -87,15 +62,12 @@ st.markdown(
         max-width: 1180px !important;
     }
 
-    /* ── Dark Sidebar for striking contrast ───────────────────────────────── */
-    /* ── Light Sidebar for unified newspaper theme ────────────────────────── */
-    /* ── Light Sidebar for unified newspaper theme ────────────────────────── */
+    /* Sidebar Layout Override */
     [data-testid="stSidebar"] {
-        background-color: #f1ece4 !important; /* Muted warm paper tone for clean division */
+        background-color: #f1ece4 !important;
         border-right: 1px solid #ddd !important;
     }
     
-    /* Target specific text containers instead of using '*' which breaks internal icons */
     [data-testid="stSidebar"] .stMarkdown p, 
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] .stSlider div {
@@ -114,12 +86,11 @@ st.markdown(
         text-transform: uppercase;
     }
     
-    /* Force hide the leaking keyboard shortcut helper tag entirely */
     [data-testid="stSidebar"] kbd {
         display: none !important;
     }
 
-    /* ── Sidebar Fetch Button (Light Mode) ────────────────────────────────── */
+    /* Sidebar Action Buttons */
     [data-testid="stSidebar"] .stButton > button {
         background-color: #ffffff !important;
         border: 1px solid #121212 !important;
@@ -144,32 +115,29 @@ st.markdown(
         color: #faf9f7 !important;
     }
     
-    /* Small info text at the sidebar bottom */
     [data-testid="stSidebar"] small, [data-testid="stSidebar"] small strong {
         color: #444444 !important;
     }
 
-    /* ── Dropdowns and Multi-select Inputs Visibility Fixing ────────────── */
+    /* Input & Dropdown Focus Overrides */
     div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         color: #121212 !important;
         border: 1px solid #ccc !important;
     }
     
-    /* Dropdown list popup containers */
     div[data-testid="stSelectbox"] ul, div[data-baseweb="popover"] ul {
         background-color: #ffffff !important;
         color: #121212 !important;
     }
     
-    /* Selected pills/tags inside multi-select */
     span[data-baseweb="tag"] {
         background-color: #e2ede4 !important;
         color: #121212 !important;
         border: 1px solid #b5ccb8 !important;
     }
 
-    /* ── Masthead ─────────────────────────────────────────────────────────── */
+    /* Editorial Masthead Element Styling */
     .masthead {
         text-align: center;
         padding: 1.6rem 0 0.6rem 0;
@@ -208,7 +176,6 @@ st.markdown(
         margin: 0.55rem 0 0 0;
     }
 
-    /* ── Section Label ────────────────────────────────────────────────────── */
     .section-label {
         font-family: 'Source Sans 3', sans-serif;
         font-size: 0.68rem;
@@ -220,7 +187,7 @@ st.markdown(
         margin: 1.6rem 0 1rem 0;
     }
 
-    /* ── Article Card ─────────────────────────────────────────────────────── */
+    /* Article Cards Structure */
     .article-card {
         border-bottom: 1px solid #ddd;
         padding: 1.1rem 0 0.8rem 0;
@@ -261,7 +228,7 @@ st.markdown(
     }
     .article-link:hover { color: #8a6a2a !important; }
 
-    /* ── Sentiment Badges ─────────────────────────────────────────────────── */
+    /* Low-Saturation Muted Sentiment Indicators */
     .sentiment-positive {
         display: inline-block;
         font-family: 'Source Sans 3', sans-serif;
@@ -309,8 +276,7 @@ st.markdown(
         vertical-align: middle;
     }
 
-    /* ── Interactive Newsprint Action Buttons ───────────────────────────── */
-    /* ── Inline "Check Sentiment" button ─────────────────────────────────── */
+    /* Content Area Action Buttons & Hover Color Inversions */
     .stButton > button {
         background-color: #ffffff !important;
         border: 1px solid #121212 !important;
@@ -318,8 +284,6 @@ st.markdown(
         padding: 0.3rem 0.9rem !important;
         transition: all 0.15s ease;
     }
-    
-    /* Default button text state */
     .stButton > button * {
         color: #121212 !important;
         font-family: 'Source Sans 3', sans-serif !important;
@@ -327,19 +291,15 @@ st.markdown(
         letter-spacing: 0.14em !important;
         text-transform: uppercase !important;
     }
-    
-    /* Hover, Active, and Focus States */
     .stButton > button:hover, .stButton > button:active, .stButton > button:focus {
         border-color: #8a6a2a !important;
         background-color: #121212 !important;
     }
-    
-    /* Crucial Fix: Force all inner text elements to invert to crisp white on hover */
     .stButton > button:hover *, .stButton > button:active *, .stButton > button:focus * {
         color: #faf9f7 !important;
     }
 
-    /* ── Stats Bar ────────────────────────────────────────────────────────── */
+    /* Core Metrics Layout */
     .stats-bar {
         display: flex;
         gap: 2rem;
@@ -370,7 +330,6 @@ st.markdown(
         align-self: stretch;
     }
 
-    /* ── Welcome Screen ───────────────────────────────────────────────────── */
     .welcome-body {
         font-family: 'Source Sans 3', sans-serif;
         font-size: 1rem;
@@ -391,7 +350,6 @@ st.markdown(
         margin: 1.8rem 0;
     }
 
-    /* ── Source Pill Tag ──────────────────────────────────────────────────── */
     .source-pill {
         display: inline-block;
         font-family: 'Source Sans 3', sans-serif;
@@ -406,7 +364,6 @@ st.markdown(
         background-color: #ffffff;
     }
 
-    /* ── Layout Rules ─────────────────────────────────────────────────────── */
     .no-results {
         font-family: 'Source Sans 3', sans-serif;
         font-size: 0.88rem;
@@ -426,26 +383,16 @@ st.markdown(
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
-
 def _strip_html(raw: str) -> str:
-    """Remove all HTML tags from *raw* and return plain text."""
     return re.sub(r"<[^>]+>", "", raw or "").strip()
 
 
 def _truncate(text: str, n: int = 200) -> str:
-    """Truncate *text* to at most *n* chars, breaking cleanly on a word boundary."""
     text = _strip_html(text)
     return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"
 
 
 def _parse_date(entry) -> str:
-    """
-    Extract a publication date string from a feedparser entry.
-    Returns 'YYYY-MM-DD HH:MM:SS', falling back to the current timestamp.
-    """
     try:
         t = entry.get("published_parsed")
         if t:
@@ -456,10 +403,6 @@ def _parse_date(entry) -> str:
 
 
 def _fetch_feed(source_name: str, url: str, max_items: int) -> list[dict]:
-    """
-    Fetch one RSS feed and return a list of article dicts.
-    Network/parse failures become sidebar warnings, not raised exceptions.
-    """
     try:
         feed = feedparser.parse(url)
         articles = []
@@ -483,7 +426,6 @@ def _fetch_feed(source_name: str, url: str, max_items: int) -> list[dict]:
 
 
 def _sentiment_tag_html(result: dict) -> str:
-    """Return an HTML string with an editorial sentiment badge + compound score."""
     label   = result["label"]
     score   = result["compound"]
     css_cls = {
@@ -498,26 +440,18 @@ def _sentiment_tag_html(result: dict) -> str:
 
 
 def _today_dateline() -> str:
-    """Return today's date as an all-caps editorial dateline."""
     return datetime.now().strftime("%A, %B %-d, %Y").upper()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SESSION STATE INITIALISATION
-# ══════════════════════════════════════════════════════════════════════════════
-
-if "articles"   not in st.session_state:
-    st.session_state.articles   = []   # list[dict] — fetched articles
+# State initialization
+if "articles" not in st.session_state:
+    st.session_state.articles = []
 if "sentiments" not in st.session_state:
-    st.session_state.sentiments = {}   # {article_idx: sentiment_result_dict}
+    st.session_state.sentiments = {}
 if "fetched_at" not in st.session_state:
     st.session_state.fetched_at = None
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR — source checkboxes, article-count slider, fetch trigger
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Sidebar Dashboard Controller Configuration
 with st.sidebar:
     st.markdown("### The Sentiment Post")
     st.markdown("---")
@@ -556,11 +490,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  FETCH LOGIC
-# ══════════════════════════════════════════════════════════════════════════════
-
 if fetch_btn:
     if not selected_sources:
         st.error("Please select at least one news source in the sidebar.")
@@ -577,15 +506,11 @@ if fetch_btn:
             )
         else:
             st.session_state.articles   = all_articles
-            st.session_state.sentiments = {}   # clear stale results on fresh fetch
+            st.session_state.sentiments = {}
             st.session_state.fetched_at = datetime.now().strftime("%H:%M:%S")
             st.rerun()
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  MASTHEAD  — always rendered
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Masthead
 st.markdown(
     f"""
     <div class="masthead">
@@ -598,11 +523,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  WELCOME SCREEN  (shown before first fetch)
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Welcome Screen
 if not st.session_state.articles:
     st.markdown(
         """
@@ -623,11 +544,7 @@ if not st.session_state.articles:
     )
     st.stop()
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  STATS BAR
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Session Aggregated Metrics
 articles:   list[dict] = st.session_state.articles
 sentiments: dict       = st.session_state.sentiments
 
@@ -669,13 +586,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  FILTER & SORT BAR
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Inverted Filtering and Sorting Mechanisms
 all_sources = sorted({a["source"] for a in articles})
-
 fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
 
 with fcol1:
@@ -708,7 +620,6 @@ with fcol3:
 
 
 def _sentiment_bucket(idx: int) -> str:
-    """Return the scored sentiment label for *idx*, or 'Not analysed'."""
     return sentiments[idx]["label"] if idx in sentiments else "Not analysed"
 
 
@@ -729,11 +640,7 @@ elif sort_by == "Date (oldest)":
 elif sort_by == "Source A–Z":
     filtered.sort(key=lambda x: x[1]["source"])
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ARTICLE FEED  — two-column editorial grid
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Editorial Grid Stream
 st.markdown('<div class="section-label">Latest Dispatches</div>', unsafe_allow_html=True)
 
 if not filtered:
@@ -746,15 +653,9 @@ else:
     columns = [col_left, col_right]
 
     for pos, (article_idx, article) in enumerate(filtered):
-
         with columns[pos % 2]:
-
-            # ── Static card HTML ───────────────────────────────────────────────
-            pub_date = article["published"][:10]   # YYYY-MM-DD only
-            snippet  = (
-                _truncate(article["summary"], 200)
-                or _truncate(article["text"], 200)
-            )
+            pub_date = article["published"][:10]
+            snippet  = _truncate(article["summary"], 200) or _truncate(article["text"], 200)
 
             st.markdown(
                 f"""
@@ -770,24 +671,18 @@ else:
                 unsafe_allow_html=True,
             )
 
-            # ── Action row ─────────────────────────────────────────────────────
             action_col, link_col = st.columns([1, 1])
 
             with action_col:
                 if article_idx in sentiments:
-                    # Already scored — render the editorial badge
                     st.markdown(
                         _sentiment_tag_html(sentiments[article_idx]),
                         unsafe_allow_html=True,
                     )
                 else:
-                    # Not yet scored — show the editorial text button
                     if st.button("Check Sentiment", key=f"analyse_{article_idx}"):
                         with st.spinner("Scoring…"):
-                            # ── Sole call into src.sentiment_model ─────────────
                             result = get_sentiment_scores(article["text"])
-                        # Persist in session_state: scoring one article never
-                        # affects the badges already shown on other articles
                         st.session_state.sentiments[article_idx] = result
                         st.rerun()
 
@@ -800,14 +695,9 @@ else:
                         unsafe_allow_html=True,
                     )
 
-            # Thin rule between cards within the same column
             st.markdown("<hr class='card-sep'>", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  FOOTER
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Render Footer
 st.markdown(
     """
     <div style="
