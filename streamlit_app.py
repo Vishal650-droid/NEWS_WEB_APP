@@ -711,7 +711,7 @@ st.markdown(
         margin-top: 3rem;
         padding-top: 1rem;
     ">
-        The Sentiment Post · Powered by VADER NLP · Live RSS Data
+        The Sentiment Post · Powered by VADER NLP · Live RSS Data ·Created by VISHAL
     </div>
     """,
     unsafe_allow_html=True,
